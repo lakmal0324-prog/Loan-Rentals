@@ -1,0 +1,430 @@
+import { useState, useEffect } from “react”;
+
+const STORAGE_KEY = “loan-tracker-data-v2”;
+
+function loadData() {
+try {
+const raw = localStorage.getItem(STORAGE_KEY);
+return raw ? JSON.parse(raw) : [];
+} catch { return []; }
+}
+function saveData(loans) {
+try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loans)); } catch {}
+}
+function formatMoney(n) {
+return new Intl.NumberFormat(“si-LK”, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+
+// Color palette — indigo/violet dark theme
+const C = {
+bg:        “#0d0d1a”,
+surface:   “#13132b”,
+surface2:  “#1a1a36”,
+border:    “#2a2a52”,
+border2:   “#3a3a6a”,
+accent:    “#7c6fff”,
+accentHi:  “#b8b0ff”,
+accentGlow:”#7c6fff44”,
+green:     “#3ddca8”,
+greenHi:   “#a8ffec”,
+red:       “#ff6b6b”,
+redHi:     “#ffaaaa”,
+amber:     “#ffbe5c”,
+text:      “#ddd8ff”,
+textMid:   “#8880bb”,
+textDim:   “#4a4875”,
+tagBg:     “#1e1e42”,
+};
+
+function Progress({ paid, total, color = C.accent }) {
+const pct = total === 0 ? 0 : Math.min((paid / total) * 100, 100);
+const barColor = pct === 100 ? C.green : pct > 60 ? C.accentHi : color;
+return (
+<div style={{ position:“relative”, height:6, borderRadius:3, background:C.surface2, overflow:“hidden” }}>
+<div style={{
+position:“absolute”, left:0, top:0, height:“100%”,
+width:`${pct}%`,
+background:`linear-gradient(90deg, ${barColor}99, ${barColor})`,
+borderRadius:3,
+transition:“width 0.6s cubic-bezier(.4,0,.2,1)”,
+boxShadow:`0 0 8px ${barColor}66`,
+}}/>
+</div>
+);
+}
+
+function Modal({ onClose, children }) {
+return (
+<div style={{ position:“fixed”, inset:0, background:”#00000088”, zIndex:50, display:“flex”, alignItems:“flex-end”, justifyContent:“center” }}
+onClick={onClose}>
+<div style={{
+background: C.surface,
+borderRadius:“20px 20px 0 0”,
+border:`1px solid ${C.border2}`,
+borderBottom:“none”,
+padding:“24px 20px 36px”,
+width:“100%”, maxWidth:480,
+boxShadow:`0 -8px 40px ${C.accentGlow}`,
+}} onClick={e=>e.stopPropagation()}>
+{children}
+</div>
+</div>
+);
+}
+
+const S = {
+root:{ minHeight:“100vh”, background:C.bg, fontFamily:”‘Noto Sans Sinhala’,‘Noto Sans’,sans-serif”, color:C.text, paddingBottom:88 },
+header:{ background:`linear-gradient(135deg, ${C.surface} 0%, ${C.surface2} 100%)`, borderBottom:`1px solid ${C.border}`, padding:“18px 18px 14px”, position:“sticky”, top:0, zIndex:10 },
+title:{ fontSize:19, fontWeight:700, color:C.accentHi, margin:0 },
+sub:{ fontSize:12, color:C.textDim, marginTop:2 },
+back:{ background:“none”, border:“none”, color:C.accent, fontSize:13, cursor:“pointer”, padding:“2px 0”, display:“flex”, alignItems:“center”, gap:5, marginBottom:8, fontFamily:“inherit” },
+section:{ padding:“0 16px” },
+card:{ background:`linear-gradient(135deg,${C.surface},${C.surface2})`, border:`1px solid ${C.border}`, borderRadius:14, padding:15, marginBottom:10, cursor:“pointer” },
+cardDone:{ opacity:0.55, border:`1px solid ${C.surface2}` },
+loanName:{ fontSize:15, fontWeight:600, color:C.text, marginBottom:3 },
+bigMoney:{ fontSize:21, fontWeight:700, color:C.accentHi },
+moneyRow:{ display:“flex”, justifyContent:“space-between”, fontSize:12, color:C.textMid, marginBottom:7 },
+tag:{ display:“inline-block”, background:C.tagBg, border:`1px solid ${C.border2}`, borderRadius:20, padding:“2px 10px”, fontSize:11, color:C.textMid },
+fab:{ position:“fixed”, bottom:24, right:20, width:54, height:54, borderRadius:“50%”, background:`linear-gradient(135deg,${C.accent},${C.accentHi})`, border:“none”, fontSize:26, color:C.bg, fontWeight:700, cursor:“pointer”, boxShadow:`0 4px 24px ${C.accentGlow}`, display:“flex”, alignItems:“center”, justifyContent:“center”, zIndex:20 },
+input:{ width:“100%”, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:“11px 13px”, color:C.text, fontSize:14, outline:“none”, boxSizing:“border-box”, marginBottom:11, fontFamily:“inherit” },
+label:{ fontSize:11, color:C.textDim, marginBottom:3, display:“block” },
+btn:{ width:“100%”, padding:“13px”, borderRadius:11, border:“none”, background:`linear-gradient(135deg,${C.accent},${C.accentHi})`, color:C.bg, fontSize:14, fontWeight:700, cursor:“pointer”, fontFamily:“inherit” },
+btnGreen:{ width:“100%”, padding:“13px”, borderRadius:11, border:“none”, background:`linear-gradient(135deg,${C.green},${C.greenHi})`, color:C.bg, fontSize:14, fontWeight:700, cursor:“pointer”, fontFamily:“inherit” },
+btnOutline:{ width:“100%”, padding:“12px”, borderRadius:11, border:`1px solid ${C.border}`, background:“transparent”, color:C.textMid, fontSize:13, cursor:“pointer”, fontFamily:“inherit”, marginTop:8 },
+btnDanger:{ width:“100%”, padding:“12px”, borderRadius:11, border:`1px solid #5a1a1a`, background:“transparent”, color:C.red, fontSize:13, cursor:“pointer”, fontFamily:“inherit”, marginTop:8 },
+divider:{ height:1, background:C.surface2, margin:“14px 0” },
+statBox:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:11, padding:“10px 13px”, flex:1 },
+statLabel:{ fontSize:11, color:C.textDim, marginBottom:3 },
+statVal:{ fontSize:16, fontWeight:700, color:C.accentHi },
+historyItem:{ display:“flex”, justifyContent:“space-between”, alignItems:“center”, padding:“10px 12px”, borderRadius:10, marginBottom:6, border:`1px solid ${C.border}`, background:C.surface2 },
+empty:{ textAlign:“center”, color:C.textDim, padding:“48px 20px”, fontSize:13 },
+payBtn:{ width:42, height:42, borderRadius:“50%”, border:`1px solid ${C.border2}`, background:C.surface2, color:C.accentHi, fontSize:20, cursor:“pointer”, display:“flex”, alignItems:“center”, justifyContent:“center” },
+};
+
+export default function LoanTracker() {
+const [loans, setLoans] = useState(loadData);
+const [view, setView] = useState(“list”);
+const [selectedId, setSelectedId] = useState(null);
+const [form, setForm] = useState({ name:””, installment:””, count:”” });
+const [formError, setFormError] = useState(””);
+const [payModal, setPayModal] = useState(false);
+const [payCount, setPayCount] = useState(1);
+const [confirm, setConfirm] = useState(null);
+// edit history state
+const [editModal, setEditModal] = useState(null); // {loanId, paymentIdx} (idx in original array)
+const [editForm, setEditForm] = useState({ date:””, count:”” });
+
+useEffect(() => { saveData(loans); }, [loans]);
+
+const selectedLoan = loans.find(l => l.id === selectedId);
+
+function addLoan() {
+const installment = parseFloat(form.installment);
+const count = parseInt(form.count);
+if (!form.name.trim()) return setFormError(“ණය නම ඇතුළත් කරන්න.”);
+if (isNaN(installment) || installment <= 0) return setFormError(“වලංගු වාරිකය ඇතුළත් කරන්න.”);
+if (isNaN(count) || count <= 0) return setFormError(“වලංගු වාරික ගණන ඇතුළත් කරන්න.”);
+const loan = { id:Date.now().toString(), name:form.name.trim(), installment, totalCount:count, paidCount:0, createdAt:new Date().toISOString(), payments:[] };
+setLoans(prev => [loan, …prev]);
+setForm({ name:””, installment:””, count:”” });
+setFormError(””);
+setView(“list”);
+}
+
+function payInstallments(loanId, count) {
+setLoans(prev => prev.map(l => {
+if (l.id !== loanId) return l;
+const actual = Math.min(count, l.totalCount - l.paidCount);
+if (actual <= 0) return l;
+const pid = Date.now().toString() + Math.random().toString(36).slice(2);
+return { …l, paidCount: l.paidCount + actual, payments: […l.payments, { id:pid, date:new Date().toISOString(), count:actual }] };
+}));
+}
+
+function deletePayment(loanId, paymentId) {
+setLoans(prev => prev.map(l => {
+if (l.id !== loanId) return l;
+const p = l.payments.find(x => x.id === paymentId);
+if (!p) return l;
+return { …l, paidCount: l.paidCount - p.count, payments: l.payments.filter(x => x.id !== paymentId) };
+}));
+setConfirm(null);
+}
+
+function saveEditPayment() {
+if (!editModal) return;
+const newCount = parseInt(editForm.count);
+if (isNaN(newCount) || newCount < 1) return;
+const newDate = editForm.date ? new Date(editForm.date).toISOString() : null;
+setLoans(prev => prev.map(l => {
+if (l.id !== editModal.loanId) return l;
+const payments = l.payments.map(p => {
+if (p.id !== editModal.paymentId) return p;
+return { …p, count: newCount, date: newDate || p.date };
+});
+const paidCount = payments.reduce((s, p) => s + p.count, 0);
+return { …l, payments, paidCount };
+}));
+setEditModal(null);
+}
+
+function deleteLoan(id) {
+setLoans(prev => prev.filter(l => l.id !== id));
+if (selectedId === id) { setView(“list”); setSelectedId(null); }
+setConfirm(null);
+}
+
+// ── ADD VIEW ──────────────────────────────────────────────────────────────
+if (view === “add”) {
+return (
+<div style={S.root}>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" rel="stylesheet"/>
+<div style={S.header}>
+<button style={S.back} onClick={() => { setView(“list”); setFormError(””); setForm({name:””,installment:””,count:””}); }}>← ආපසු</button>
+<h1 style={S.title}>නව ණය එකතු කරන්න</h1>
+</div>
+<div style={{ …S.section, paddingTop:20 }}>
+<label style={S.label}>ණය නම / විස්තරය</label>
+<input style={S.input} placeholder=“උදා: බැංකු ණය, වාහන ණය…” value={form.name} onChange={e=>setForm(f=>({…f,name:e.target.value}))}/>
+<label style={S.label}>මාසික වාරිකය (රු.)</label>
+<input style={S.input} type=“number” placeholder=“5000” value={form.installment} onChange={e=>setForm(f=>({…f,installment:e.target.value}))}/>
+<label style={S.label}>මුළු වාරික ගණන</label>
+<input style={S.input} type=“number” placeholder=“24” value={form.count} onChange={e=>setForm(f=>({…f,count:e.target.value}))}/>
+{form.installment && form.count && !isNaN(parseFloat(form.installment)) && !isNaN(parseInt(form.count)) && (
+<div style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:12, marginBottom:14 }}>
+<div style={{ fontSize:11, color:C.textDim, marginBottom:3 }}>ගෙවිය යුතු මුළු මුදල</div>
+<div style={{ fontSize:22, fontWeight:700, color:C.accentHi }}>රු. {formatMoney(parseFloat(form.installment) * parseInt(form.count))}</div>
+</div>
+)}
+{formError && <div style={{ color:C.red, fontSize:13, marginBottom:11 }}>{formError}</div>}
+<button style={S.btn} onClick={addLoan}>ණය සුරකින්න</button>
+<button style={S.btnOutline} onClick={() => { setView(“list”); setFormError(””); }}>අවලංගු කරන්න</button>
+</div>
+</div>
+);
+}
+
+// ── DETAIL VIEW ───────────────────────────────────────────────────────────
+if (view === “detail” && selectedLoan) {
+const l = selectedLoan;
+const totalAmount = l.installment * l.totalCount;
+const paidAmount  = l.installment * l.paidCount;
+const remaining   = totalAmount - paidAmount;
+const remainingCount = l.totalCount - l.paidCount;
+const isDone = remainingCount === 0;
+const pct = l.totalCount === 0 ? 0 : Math.round((l.paidCount / l.totalCount) * 100);
+
+```
+// color-code progress
+const progressColor = pct === 100 ? C.green : pct >= 60 ? C.accentHi : pct >= 30 ? C.amber : C.red;
+
+return (
+  <div style={S.root}>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" rel="stylesheet"/>
+    <div style={S.header}>
+      <button style={S.back} onClick={() => { setView("list"); setSelectedId(null); }}>← ආපසු</button>
+      <h1 style={S.title}>{l.name}</h1>
+      <div style={S.sub}>{isDone ? "✅ ණය ගෙවා අවසන්" : `${remainingCount} වාරික ඉතිරිව ඇත`}</div>
+    </div>
+
+    <div style={{ ...S.section, paddingTop:18 }}>
+      {/* Hero remaining */}
+      <div style={{ background:`linear-gradient(135deg,${C.surface},${C.surface2})`, border:`1px solid ${C.border2}`, borderRadius:16, padding:18, marginBottom:14, textAlign:"center", boxShadow:`0 0 32px ${C.accentGlow}` }}>
+        <div style={{ fontSize:11, color:C.textDim, marginBottom:3 }}>ඉතිරිව ගෙවිය යුතු මුදල</div>
+        <div style={{ fontSize:34, fontWeight:700, color: isDone ? C.green : C.accentHi }}>
+          {isDone ? "✓ ගෙවා අවසන්" : `රු. ${formatMoney(remaining)}`}
+        </div>
+        {!isDone && <div style={{ fontSize:12, color:C.textDim, marginTop:3 }}>{remainingCount} × රු. {formatMoney(l.installment)}</div>}
+      </div>
+
+      {/* Stats */}
+      <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+        <div style={S.statBox}><div style={S.statLabel}>වාරිකය</div><div style={S.statVal}>රු. {formatMoney(l.installment)}</div></div>
+        <div style={S.statBox}><div style={S.statLabel}>ගෙවූ</div><div style={{ ...S.statVal, color: progressColor }}>{l.paidCount}/{l.totalCount}</div></div>
+        <div style={S.statBox}><div style={S.statLabel}>ගෙවූ මුදල</div><div style={S.statVal}>රු. {formatMoney(paidAmount)}</div></div>
+      </div>
+
+      {/* Progress */}
+      <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:C.textDim, marginBottom:4 }}>
+        <span>ප්‍රගතිය</span>
+        <span style={{ color: progressColor, fontWeight:600 }}>{pct}%</span>
+      </div>
+      <Progress paid={l.paidCount} total={l.totalCount} color={progressColor}/>
+
+      <div style={S.divider}/>
+
+      {!isDone && (
+        <button style={S.btnGreen} onClick={() => { setPayCount(1); setPayModal(true); }}>
+          💳 වාරිකය ගෙවූ බව සටහන් කරන්න
+        </button>
+      )}
+      <button style={S.btnDanger} onClick={() => setConfirm({ type:"deleteLoan", id:l.id })}>
+        🗑 ණය මකන්න
+      </button>
+
+      {/* Payment history with edit */}
+      {l.payments.length > 0 && (
+        <>
+          <div style={S.divider}/>
+          <div style={{ fontSize:12, color:C.textDim, marginBottom:10 }}>ගෙවීම් ඉතිහාසය</div>
+          {[...l.payments].reverse().map((p, ri) => {
+            const origIdx = l.payments.length - 1 - ri;
+            const d = new Date(p.date);
+            const dStr = d.toLocaleDateString("si-LK");
+            return (
+              <div key={p.id || origIdx} style={S.historyItem}>
+                <div>
+                  <div style={{ fontSize:13, color:C.text }}>{dStr}</div>
+                  <div style={{ fontSize:11, color:C.textDim, marginTop:1 }}>{p.count} වාරිකය</div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:C.green }}>රු. {formatMoney(p.count * l.installment)}</div>
+                  <button
+                    onClick={() => { setEditModal({ loanId:l.id, paymentId:p.id }); setEditForm({ date: d.toISOString().slice(0,10), count: String(p.count) }); }}
+                    style={{ background:C.tagBg, border:`1px solid ${C.border2}`, borderRadius:7, padding:"4px 10px", color:C.accentHi, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => setConfirm({ type:"deletePayment", loanId:l.id, paymentId:p.id })}
+                    style={{ background:"#2a0a0a", border:`1px solid #5a1a1a`, borderRadius:7, padding:"4px 8px", color:C.red, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    🗑
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+
+    {/* Pay modal */}
+    {payModal && (
+      <Modal onClose={() => setPayModal(false)}>
+        <div style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:14 }}>කීයක් ගෙවූ බව සටහන් කරන්නද?</div>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+          <button style={S.payBtn} onClick={() => setPayCount(c => Math.max(1,c-1))}>−</button>
+          <div style={{ flex:1, textAlign:"center", fontSize:30, fontWeight:700, color:C.accentHi }}>{payCount}</div>
+          <button style={S.payBtn} onClick={() => setPayCount(c => Math.min(remainingCount,c+1))}>+</button>
+        </div>
+        <div style={{ textAlign:"center", fontSize:12, color:C.textDim, marginBottom:14 }}>රු. {formatMoney(payCount * l.installment)} ගෙවූ ලෙස සටහන් වේ</div>
+        <button style={S.btnGreen} onClick={() => { payInstallments(l.id, payCount); setPayModal(false); }}>✓ සටහන් කරන්න</button>
+        <button style={S.btnOutline} onClick={() => setPayModal(false)}>අවලංගු</button>
+      </Modal>
+    )}
+
+    {/* Edit payment modal */}
+    {editModal && (
+      <Modal onClose={() => setEditModal(null)}>
+        <div style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:16 }}>ගෙවීම සංශෝධනය කරන්න</div>
+        <label style={S.label}>දිනය</label>
+        <input style={S.input} type="date" value={editForm.date} onChange={e => setEditForm(f=>({...f,date:e.target.value}))}/>
+        <label style={S.label}>වාරික ගණන</label>
+        <input style={S.input} type="number" min="1" value={editForm.count} onChange={e => setEditForm(f=>({...f,count:e.target.value}))}/>
+        <button style={S.btn} onClick={saveEditPayment}>✓ සුරකින්න</button>
+        <button style={S.btnOutline} onClick={() => setEditModal(null)}>අවලංගු</button>
+      </Modal>
+    )}
+
+    {/* Confirm modal */}
+    {confirm && (
+      <Modal onClose={() => setConfirm(null)}>
+        <div style={{ fontSize:14, color:C.text, marginBottom:20, lineHeight:1.7 }}>
+          {confirm.type === "deleteLoan" && "ඔබට මෙම ණය වාර්තාව ස්ථිරවම මකා දැමීමට අවශ්‍යද?"}
+          {confirm.type === "deletePayment" && "මෙම ගෙවීම් සටහන ඉවත් කරන්නද? ගෙවූ ගණන ඒ අනුව අඩු වේ."}
+        </div>
+        <button
+          style={{ ...S.btn, background:"linear-gradient(135deg,#c0392b,#e74c3c)" }}
+          onClick={() => {
+            if (confirm.type === "deleteLoan") deleteLoan(confirm.id);
+            if (confirm.type === "deletePayment") deletePayment(confirm.loanId, confirm.paymentId);
+          }}>
+          ඔව්, මකන්න
+        </button>
+        <button style={S.btnOutline} onClick={() => setConfirm(null)}>නැහැ, ආපසු</button>
+      </Modal>
+    )}
+  </div>
+);
+```
+
+}
+
+// ── LIST VIEW ─────────────────────────────────────────────────────────────
+const activeLoans = loans.filter(l => l.paidCount < l.totalCount);
+const doneLoans   = loans.filter(l => l.paidCount >= l.totalCount);
+const totalOwed   = activeLoans.reduce((s,l) => s + l.installment*(l.totalCount-l.paidCount), 0);
+
+function cardAccent(l) {
+const pct = l.totalCount === 0 ? 0 : (l.paidCount / l.totalCount) * 100;
+if (pct >= 80) return C.green;
+if (pct >= 50) return C.accentHi;
+if (pct >= 25) return C.amber;
+return C.red;
+}
+
+return (
+<div style={S.root}>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" rel="stylesheet"/>
+<div style={S.header}>
+<h1 style={S.title}>💳 ණය වාරික ලිපිගොනුව</h1>
+{loans.length > 0 && (
+<div style={{ marginTop:10, background:C.surface2, borderRadius:10, padding:“9px 13px”, border:`1px solid ${C.border}` }}>
+<div style={{ fontSize:11, color:C.textDim }}>ඉතිරිව ගෙවිය යුතු මුළු මුදල</div>
+<div style={{ fontSize:22, fontWeight:700, color:C.accentHi }}>රු. {formatMoney(totalOwed)}</div>
+<div style={{ fontSize:11, color:C.textDim, marginTop:1 }}>{activeLoans.length} ක්‍රියාකාරී ණය</div>
+</div>
+)}
+</div>
+
+```
+  <div style={{ ...S.section, paddingTop:14 }}>
+    {loans.length === 0 && (
+      <div style={S.empty}>
+        <div style={{ fontSize:38, marginBottom:10 }}>📋</div>
+        <div>ණය වාර්තා නොමැත.</div>
+        <div style={{ marginTop:6, color:C.textDim }}>+ බොත්තම ඔබා නව ණය එකතු කරන්න</div>
+      </div>
+    )}
+
+    {activeLoans.map(l => {
+      const remaining = l.installment * (l.totalCount - l.paidCount);
+      const remainingCount = l.totalCount - l.paidCount;
+      const ac = cardAccent(l);
+      return (
+        <div key={l.id} style={{ ...S.card, borderLeft:`3px solid ${ac}` }} onClick={() => { setSelectedId(l.id); setView("detail"); }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:7 }}>
+            <div style={S.loanName}>{l.name}</div>
+            <span style={{ ...S.tag, color:ac, borderColor:ac+"66" }}>{remainingCount} ඉතිරි</span>
+          </div>
+          <div style={{ ...S.bigMoney, color:ac }}>රු. {formatMoney(remaining)}</div>
+          <div style={S.moneyRow}>
+            <span>ගෙවිය යුතු ඉතිරිය</span>
+            <span style={{ color:ac }}>{l.paidCount}/{l.totalCount} ගෙවූ</span>
+          </div>
+          <Progress paid={l.paidCount} total={l.totalCount} color={ac}/>
+        </div>
+      );
+    })}
+
+    {doneLoans.length > 0 && (
+      <>
+        <div style={{ fontSize:11, color:C.textDim, margin:"14px 0 7px" }}>✓ ගෙවා අවසන්</div>
+        {doneLoans.map(l => (
+          <div key={l.id} style={{ ...S.card, ...S.cardDone }} onClick={() => { setSelectedId(l.id); setView("detail"); }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ ...S.loanName, color:C.textDim }}>{l.name}</div>
+              <span style={{ ...S.tag, color:C.green, borderColor:C.green+"44" }}>✓ අවසන්</span>
+            </div>
+            <div style={{ fontSize:12, color:C.textDim, marginTop:3 }}>රු. {formatMoney(l.installment * l.totalCount)} — {l.totalCount} වාරිකය</div>
+          </div>
+        ))}
+      </>
+    )}
+  </div>
+
+  <button style={S.fab} onClick={() => setView("add")}>+</button>
+</div>
+```
+
+);
+}
